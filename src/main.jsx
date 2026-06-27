@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import L from "leaflet";
+import { createWorker } from "tesseract.js";
 import "leaflet/dist/leaflet.css";
 import {
   Archive,
@@ -15,87 +16,20 @@ import {
   Utensils,
   X,
 } from "lucide-react";
+import { seedRestaurants } from "./seedRestaurants";
 import "./styles.css";
 
-const STORAGE_KEY = "hk-veg-map-restaurants";
-
-const sampleRestaurants = [
-  {
-    id: crypto.randomUUID(),
-    name: "Green Common 中環",
-    category: "vegetarian",
-    address: "中環德輔道中",
-    district: "中環",
-    lat: 22.2819,
-    lng: 114.1586,
-    notes: "全素/植物肉選擇，適合 quick lunch。",
-    menuUpdatedAt: "2026-06-28",
-    menuItems: [
-      { name: "Omni luncheon bowl", price: "$88", vegetarian: true },
-      { name: "植物芝士漢堡", price: "$98", vegetarian: true },
-      { name: "燕麥奶咖啡", price: "$42", vegetarian: true },
-    ],
-  },
-  {
-    id: crypto.randomUUID(),
-    name: "LN Fortunate Coffee",
-    category: "vegetarian",
-    address: "灣仔駱克道",
-    district: "灣仔",
-    lat: 22.2787,
-    lng: 114.1736,
-    notes: "純素 café，同時適合記低甜品同飲品。",
-    menuUpdatedAt: "2026-06-28",
-    menuItems: [
-      { name: "純素卡邦尼意粉", price: "$108", vegetarian: true },
-      { name: "豆腐芝士蛋糕", price: "$58", vegetarian: true },
-      { name: "全日早餐", price: "$128", vegetarian: true },
-    ],
-  },
-  {
-    id: crypto.randomUUID(),
-    name: "一般茶餐廳示例",
-    category: "mixed",
-    address: "旺角彌敦道",
-    district: "旺角",
-    lat: 22.3193,
-    lng: 114.1694,
-    notes: "有素食選擇，需要確認湯底同醬汁。",
-    menuUpdatedAt: "2026-06-28",
-    menuItems: [
-      { name: "乾炒牛河", price: "$62", vegetarian: false },
-      { name: "羅漢齋飯", price: "$58", vegetarian: true },
-      { name: "番茄蛋通粉", price: "$45", vegetarian: true },
-      { name: "公司三文治", price: "$48", vegetarian: false },
-    ],
-  },
-  {
-    id: crypto.randomUUID(),
-    name: "西式餐廳示例",
-    category: "mixed",
-    address: "尖沙咀海防道",
-    district: "尖沙咀",
-    lat: 22.2976,
-    lng: 114.1722,
-    notes: "一般餐廳，menu 內只 highlight 素食 option。",
-    menuUpdatedAt: "2026-06-28",
-    menuItems: [
-      { name: "Margherita pizza", price: "$138", vegetarian: true },
-      { name: "烤雞沙律", price: "$118", vegetarian: false },
-      { name: "蘑菇意大利飯", price: "$128", vegetarian: true },
-    ],
-  },
-];
+const STORAGE_KEY = "hk-veg-map-restaurants-v3";
 
 function loadRestaurants() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return sampleRestaurants;
+  if (!saved) return seedRestaurants;
 
   try {
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) && parsed.length ? parsed : sampleRestaurants;
+    return Array.isArray(parsed) && parsed.length ? parsed : seedRestaurants;
   } catch {
-    return sampleRestaurants;
+    return seedRestaurants;
   }
 }
 
@@ -141,6 +75,16 @@ function App() {
       const matchesQuery =
         !lowered ||
         [restaurant.name, restaurant.address, restaurant.district, restaurant.notes]
+          .concat([
+            restaurant.archiveName,
+            restaurant.brand,
+            restaurant.phone,
+            restaurant.hours,
+            restaurant.status,
+            restaurant.menuSource,
+            restaurant.cuisine,
+            restaurant.sourceConfidence,
+          ])
           .filter(Boolean)
           .some((value) => value.toLowerCase().includes(lowered));
       return matchesFilter && matchesQuery;
@@ -257,7 +201,11 @@ function App() {
                 </span>
                 <span>
                   <strong>{restaurant.name}</strong>
-                  <small>{restaurant.district || restaurant.address}</small>
+                  <small>
+                    {[restaurant.district || restaurant.address, restaurant.hours]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </small>
                 </span>
               </button>
             ))}
@@ -362,7 +310,11 @@ function RestaurantDetails({ restaurant }) {
           {restaurant.category === "vegetarian" ? "素食餐廳" : "一般餐廳"}
         </span>
         <h2>{restaurant.name}</h2>
+        {restaurant.brand && restaurant.brand !== restaurant.name && (
+          <p className="brand-line">{restaurant.brand}</p>
+        )}
         <p><MapPin size={15} /> {restaurant.address}</p>
+        {restaurant.cuisine && <p className="cuisine-line">{restaurant.cuisine}</p>}
       </div>
 
       <div className="stat-grid">
@@ -376,7 +328,45 @@ function RestaurantDetails({ restaurant }) {
         </div>
       </div>
 
+      <div className="metadata-grid">
+        {restaurant.archiveName && (
+          <div>
+            <span>Archive</span>
+            <strong>{restaurant.archiveName}</strong>
+          </div>
+        )}
+        {restaurant.phone && (
+          <div>
+            <span>電話</span>
+            <strong>{restaurant.phone}</strong>
+          </div>
+        )}
+        {restaurant.hours && (
+          <div>
+            <span>營業時間</span>
+            <strong>{restaurant.hours}</strong>
+          </div>
+        )}
+        {restaurant.status && (
+          <div>
+            <span>狀態</span>
+            <strong>{restaurant.status}</strong>
+          </div>
+        )}
+      </div>
+
       {restaurant.notes && <p className="notes">{restaurant.notes}</p>}
+
+      {(restaurant.sourceConfidence || restaurant.sourceUrl) && (
+        <div className="source-box">
+          {restaurant.sourceConfidence && <span>{restaurant.sourceConfidence}</span>}
+          {restaurant.sourceUrl && (
+            <a href={restaurant.sourceUrl} target="_blank" rel="noreferrer">
+              Source
+            </a>
+          )}
+        </div>
+      )}
 
       <div className="menu-heading">
         <h3>Menu</h3>
@@ -409,13 +399,37 @@ function AddRestaurantModal({ onAdd, onClose }) {
     notes: "",
     menuText: "",
   });
+  const [ocrStatus, setOcrStatus] = useState("");
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  async function extractImageText(file) {
+    setOcrStatus("讀取圖片文字中...");
+    let worker;
+    try {
+      worker = await createWorker("eng+chi_tra");
+      const {
+        data: { text },
+      } = await worker.recognize(file);
+      updateField("menuText", text.trim());
+      setOcrStatus("已將圖片文字填入 Menu text");
+    } catch {
+      setOcrStatus("OCR 未能讀取呢張圖片，請試清晰啲嘅相或手動貼上文字。");
+    } finally {
+      if (worker) await worker.terminate();
+    }
+  }
+
   function uploadMenu(file) {
     if (!file) return;
+    if (file.type.startsWith("image/")) {
+      void extractImageText(file);
+      return;
+    }
+
+    setOcrStatus("");
     const reader = new FileReader();
     reader.onload = () => updateField("menuText", String(reader.result || ""));
     reader.readAsText(file);
@@ -433,6 +447,9 @@ function AddRestaurantModal({ onAdd, onClose }) {
       lat: Number(form.lat),
       lng: Number(form.lng),
       notes: form.notes.trim(),
+      cuisine: "",
+      sourceConfidence: "User uploaded menu",
+      sourceUrl: "",
       menuUpdatedAt: new Date().toISOString().slice(0, 10),
       menuItems: menuItems.length ? menuItems : [{ name: "待補 menu", price: "", vegetarian: form.category === "vegetarian" }],
     });
@@ -444,7 +461,7 @@ function AddRestaurantModal({ onAdd, onClose }) {
         <div className="modal-title">
           <div>
             <h2>加入新餐廳</h2>
-            <p>填餐廳名、位置，再貼上或 upload menu text。</p>
+            <p>填餐廳名、位置，再貼上、upload text 或 menu 圖片。</p>
           </div>
           <button className="icon-button" type="button" onClick={onClose} title="關閉">
             <X size={18} />
@@ -495,12 +512,13 @@ function AddRestaurantModal({ onAdd, onClose }) {
             placeholder={"羅漢齋飯 $58\n乾炒牛河 $62\nVegan burger $98"}
           />
         </label>
+        {ocrStatus && <p className="ocr-status">{ocrStatus}</p>}
 
         <div className="modal-actions">
           <label className="secondary-button file-button">
             <Upload size={17} />
-            Upload menu .txt
-            <input accept=".txt,text/plain,application/json" type="file" onChange={(event) => uploadMenu(event.target.files?.[0])} />
+            Upload menu image / .txt
+            <input accept="image/png,image/jpeg,image/webp,.txt,text/plain" type="file" onChange={(event) => uploadMenu(event.target.files?.[0])} />
           </label>
           <button className="primary-button" type="submit">
             <LocateFixed size={17} />

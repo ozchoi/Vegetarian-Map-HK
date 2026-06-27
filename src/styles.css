@@ -335,6 +335,18 @@ button {
   gap: 6px;
 }
 
+.details-header .cuisine-line {
+  margin-top: 8px;
+  color: #2e4538;
+  font-weight: 800;
+}
+
+.details-header .brand-line {
+  margin: -2px 0 8px;
+  color: #176a45;
+  font-weight: 900;
+}
+
 .type-badge {
   display: inline-flex;
   align-items: center;
@@ -378,12 +390,58 @@ button {
   font-size: 13px;
 }
 
+.metadata-grid {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.metadata-grid div {
+  border: 1px solid #dce1db;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcf8;
+}
+
+.metadata-grid span {
+  display: block;
+  color: #68746d;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.metadata-grid strong {
+  display: block;
+  color: #26342c;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .notes {
   border-left: 3px solid #1f7a4d;
   padding: 10px 0 10px 12px;
   color: #344139;
   background: #f4faf5;
   margin: 0 0 18px;
+}
+
+.source-box {
+  border: 1px solid #dce1db;
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  gap: 7px;
+  margin: -6px 0 18px;
+  background: #fbfcf8;
+  color: #56625b;
+  font-size: 13px;
+}
+
+.source-box a {
+  color: #176a45;
+  font-weight: 800;
+  text-decoration: none;
 }
 
 .menu-heading {
@@ -521,6 +579,12 @@ textarea {
 .menu-upload,
 .modal > label {
   margin-top: 12px;
+}
+
+.ocr-status {
+  margin: 8px 0 0;
+  color: #476052;
+  font-size: 13px;
 }
 
 .modal-actions {
