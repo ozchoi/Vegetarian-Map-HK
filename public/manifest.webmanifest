@@ -1,0 +1,24 @@
+{
+  "name": "香港素食地圖",
+  "short_name": "素食地圖",
+  "description": "香港素食餐廳同一般餐廳素食選擇地圖。",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#f8faf6",
+  "theme_color": "#1f7a4d",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
