@@ -19,7 +19,7 @@ import {
 import { seedRestaurants } from "./seedRestaurants";
 import "./styles.css";
 
-const STORAGE_KEY = "hk-veg-map-restaurants-v3";
+const STORAGE_KEY = "hk-veg-map-restaurants-v4";
 
 function loadRestaurants() {
   const saved = localStorage.getItem(STORAGE_KEY);
