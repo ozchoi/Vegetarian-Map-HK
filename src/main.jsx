@@ -260,7 +260,7 @@ function RestaurantMap({ restaurants, selectedRestaurant, onSelect }) {
       const marker = L.marker([restaurant.lat, restaurant.lng], {
         icon: L.divIcon({
           className: "",
-          html: `<span class="map-marker ${restaurant.category} ${isSelected ? "selected" : ""}">${restaurant.category === "vegetarian" ? "葉" : "素"}</span>`,
+          html: `<span class="map-marker ${restaurant.category} ${isSelected ? "selected" : ""}">${restaurant.category === "vegetarian" ? "素" : "可"}</span>`,
           iconSize: [36, 36],
           iconAnchor: [18, 18],
         }),
