@@ -20,7 +20,7 @@ import {
 import { seedRestaurants } from "./seedRestaurants";
 import "./styles.css";
 
-const STORAGE_KEY = "hk-veg-map-restaurants-v4";
+const STORAGE_KEY = "hk-veg-map-restaurants-v5";
 
 function loadRestaurants() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -105,6 +105,10 @@ const DISTRICT_CENTERS = [
   ["荃灣", 22.3717, 114.1131, ["Tsuen Wan", "荃灣"]],
   ["葵涌", 22.3639, 114.1314, ["Kwai Chung", "葵涌", "葵興"]],
   ["馬鞍山", 22.424, 114.231, ["Ma On Shan", "馬鞍山"]],
+  ["大埔", 22.4501, 114.1688, ["Tai Po", "大埔"]],
+  ["沙田", 22.3819, 114.1881, ["Sha Tin", "沙田"]],
+  ["大圍", 22.3727, 114.1786, ["Tai Wai", "大圍"]],
+  ["火炭", 22.395, 114.198, ["Fo Tan", "火炭"]],
 ];
 
 function inferDistrictFromAddress(address) {
