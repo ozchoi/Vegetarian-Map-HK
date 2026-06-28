@@ -129,8 +129,15 @@ button {
 
 .workspace {
   display: grid;
-  grid-template-columns: 320px minmax(360px, 1fr) 360px;
+  grid-template-rows: minmax(430px, 58vh) auto;
   min-height: calc(100vh - 78px);
+}
+
+.results-region {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) 390px;
+  min-height: 520px;
+  border-top: 1px solid #d9ddd5;
 }
 
 .sidebar,
@@ -144,6 +151,16 @@ button {
 .details-panel {
   border-right: 0;
   border-left: 1px solid #d9ddd5;
+}
+
+.list-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.filter-button {
+  padding: 0 13px;
 }
 
 .searchbox {
@@ -210,6 +227,7 @@ button {
 .restaurant-list {
   display: grid;
   gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
 .restaurant-row {
@@ -272,7 +290,7 @@ button {
 
 .map-region {
   position: relative;
-  min-height: 540px;
+  min-height: 430px;
 }
 
 .map-canvas {
@@ -503,6 +521,51 @@ button {
   text-align: center;
 }
 
+.filter-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  background: rgb(20 28 23 / 0.32);
+}
+
+.filter-drawer {
+  width: min(390px, calc(100vw - 28px));
+  height: 100%;
+  background: #fffefa;
+  border-right: 1px solid #d9ddd5;
+  box-shadow: 18px 0 45px rgb(0 0 0 / 0.2);
+  padding: 16px;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 13px;
+}
+
+.filter-title {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.filter-title h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.filter-title p {
+  margin: 4px 0 0;
+  color: #626f67;
+}
+
+.filter-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -581,6 +644,17 @@ textarea {
   margin-top: 12px;
 }
 
+.location-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.location-actions .secondary-button {
+  flex: 1 1 210px;
+}
+
 .ocr-status {
   margin: 8px 0 0;
   color: #476052;
@@ -606,12 +680,11 @@ textarea {
 }
 
 @media (max-width: 1120px) {
-  .workspace {
-    grid-template-columns: 290px minmax(360px, 1fr);
+  .results-region {
+    grid-template-columns: 1fr;
   }
 
   .details-panel {
-    grid-column: 1 / -1;
     border-left: 0;
     border-top: 1px solid #d9ddd5;
     max-height: none;
@@ -634,6 +707,7 @@ textarea {
 
   .workspace {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(390px, 52vh) auto;
   }
 
   .sidebar,
@@ -643,7 +717,15 @@ textarea {
   }
 
   .map-region {
-    min-height: 440px;
+    min-height: 390px;
+  }
+
+  .list-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-button {
+    width: 100%;
   }
 
   .form-grid {

@@ -12,6 +12,7 @@ import {
   MapPin,
   Plus,
   Search,
+  SlidersHorizontal,
   Upload,
   Utensils,
   X,
@@ -50,11 +51,140 @@ function parseMenuText(text) {
     });
 }
 
+function isWithinBounds(restaurant, bounds) {
+  if (!bounds) return true;
+  return (
+    restaurant.lat <= bounds.north &&
+    restaurant.lat >= bounds.south &&
+    restaurant.lng <= bounds.east &&
+    restaurant.lng >= bounds.west
+  );
+}
+
+function matchesHoursFilter(restaurant, hoursFilter) {
+  if (hoursFilter === "all") return true;
+  if (hoursFilter === "has-hours") return Boolean(restaurant.hours);
+  if (!restaurant.hours) return false;
+
+  const times = [...restaurant.hours.matchAll(/(\d{1,2}):(\d{2})/g)].map((match) => ({
+    hour: Number(match[1]),
+    minute: Number(match[2]),
+  }));
+
+  if (hoursFilter === "early") {
+    return times.some((time) => time.hour < 10 || (time.hour === 10 && time.minute === 0));
+  }
+
+  if (hoursFilter === "late") {
+    return times.some((time) => time.hour >= 21);
+  }
+
+  return true;
+}
+
+const DISTRICT_CENTERS = [
+  ["中環", 22.2819, 114.1586, ["Central", "中環"]],
+  ["金鐘", 22.2799, 114.1655, ["Admiralty", "金鐘"]],
+  ["灣仔", 22.2783, 114.1747, ["Wan Chai", "灣仔"]],
+  ["銅鑼灣", 22.2802, 114.1843, ["Causeway Bay", "銅鑼灣"]],
+  ["北角", 22.2915, 114.2006, ["North Point", "北角"]],
+  ["太古", 22.2868, 114.2178, ["Taikoo", "太古"]],
+  ["尖沙咀", 22.2976, 114.1722, ["Tsim Sha Tsui", "尖沙咀"]],
+  ["西九", 22.2991, 114.1596, ["West Kowloon", "西九"]],
+  ["佐敦", 22.3043, 114.1716, ["Jordan", "佐敦"]],
+  ["油麻地", 22.3133, 114.1709, ["Yau Ma Tei", "油麻地"]],
+  ["旺角", 22.3193, 114.1694, ["Mong Kok", "旺角"]],
+  ["太子", 22.3245, 114.1687, ["Prince Edward", "太子"]],
+  ["深水埗", 22.3305, 114.1622, ["Sham Shui Po", "深水埗"]],
+  ["荔枝角", 22.3377, 114.148, ["Lai Chi Kok", "荔枝角"]],
+  ["黃埔", 22.3051, 114.1906, ["Whampoa", "黃埔", "紅磡"]],
+  ["九龍城", 22.3282, 114.1887, ["Kowloon City", "九龍城"]],
+  ["鑽石山", 22.3402, 114.2017, ["Diamond Hill", "鑽石山"]],
+  ["黃大仙", 22.3417, 114.1943, ["Wong Tai Sin", "黃大仙"]],
+  ["觀塘", 22.312, 114.226, ["Kwun Tong", "觀塘"]],
+  ["荃灣", 22.3717, 114.1131, ["Tsuen Wan", "荃灣"]],
+  ["葵涌", 22.3639, 114.1314, ["Kwai Chung", "葵涌", "葵興"]],
+  ["馬鞍山", 22.424, 114.231, ["Ma On Shan", "馬鞍山"]],
+];
+
+function inferDistrictFromAddress(address) {
+  const lowered = address.toLowerCase();
+  return DISTRICT_CENTERS.find(([district, , , aliases]) =>
+    [district, ...aliases].some((alias) => lowered.includes(alias.toLowerCase())),
+  )?.[0] || "";
+}
+
+function inferDistrictFromCoords(lat, lng) {
+  let best = DISTRICT_CENTERS[0];
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  DISTRICT_CENTERS.forEach((center) => {
+    const distance = (lat - center[1]) ** 2 + (lng - center[2]) ** 2;
+    if (distance < bestDistance) {
+      best = center;
+      bestDistance = distance;
+    }
+  });
+
+  return best[0];
+}
+
+function parseGoogleMapsLocation(value) {
+  const text = value.trim();
+  const atMatch = text.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (atMatch) return { lat: Number(atMatch[1]), lng: Number(atMatch[2]) };
+
+  const bangMatch = text.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+  if (bangMatch) return { lat: Number(bangMatch[1]), lng: Number(bangMatch[2]) };
+
+  const queryMatch = text.match(/[?&](?:q|query|ll)=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (queryMatch) return { lat: Number(queryMatch[1]), lng: Number(queryMatch[2]) };
+
+  return null;
+}
+
+async function geocodeAddress(address) {
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("countrycodes", "hk");
+  url.searchParams.set("q", address);
+
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Geocoding failed");
+  const [result] = await response.json();
+  if (!result) throw new Error("No geocoding result");
+
+  return {
+    lat: Number(result.lat),
+    lng: Number(result.lon),
+    displayName: result.display_name,
+  };
+}
+
+async function reverseGeocode(lat, lng) {
+  const url = new URL("https://nominatim.openstreetmap.org/reverse");
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("lat", String(lat));
+  url.searchParams.set("lon", String(lng));
+
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Reverse geocoding failed");
+  return response.json();
+}
+
 function App() {
   const [restaurants, setRestaurants] = useState(loadRestaurants);
   const [selectedId, setSelectedId] = useState(restaurants[0]?.id);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const [advancedFilters, setAdvancedFilters] = useState({
+    district: "all",
+    cuisine: "all",
+    hours: "all",
+  });
+  const [showFilters, setShowFilters] = useState(false);
+  const [mapBounds, setMapBounds] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [toast, setToast] = useState("");
 
@@ -68,10 +198,21 @@ function App() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
+  const filterOptions = useMemo(() => {
+    const districts = [...new Set(restaurants.map((restaurant) => restaurant.district).filter(Boolean))].sort();
+    const cuisines = [...new Set(restaurants.map((restaurant) => restaurant.cuisine).filter(Boolean))].sort();
+    return { districts, cuisines };
+  }, [restaurants]);
+
   const filteredRestaurants = useMemo(() => {
     const lowered = query.trim().toLowerCase();
     return restaurants.filter((restaurant) => {
       const matchesFilter = filter === "all" || restaurant.category === filter;
+      const matchesDistrict =
+        advancedFilters.district === "all" || restaurant.district === advancedFilters.district;
+      const matchesCuisine =
+        advancedFilters.cuisine === "all" || restaurant.cuisine === advancedFilters.cuisine;
+      const matchesHours = matchesHoursFilter(restaurant, advancedFilters.hours);
       const matchesQuery =
         !lowered ||
         [restaurant.name, restaurant.address, restaurant.district, restaurant.notes]
@@ -87,12 +228,34 @@ function App() {
           ])
           .filter(Boolean)
           .some((value) => value.toLowerCase().includes(lowered));
-      return matchesFilter && matchesQuery;
+      return matchesFilter && matchesDistrict && matchesCuisine && matchesHours && matchesQuery;
     });
-  }, [filter, query, restaurants]);
+  }, [advancedFilters, filter, query, restaurants]);
+
+  const visibleRestaurants = useMemo(
+    () => filteredRestaurants.filter((restaurant) => isWithinBounds(restaurant, mapBounds)),
+    [filteredRestaurants, mapBounds],
+  );
 
   const selectedRestaurant =
-    restaurants.find((restaurant) => restaurant.id === selectedId) || filteredRestaurants[0];
+    restaurants.find((restaurant) => restaurant.id === selectedId) || visibleRestaurants[0] || filteredRestaurants[0];
+
+  const activeFilterCount = [
+    filter !== "all",
+    advancedFilters.district !== "all",
+    advancedFilters.cuisine !== "all",
+    advancedFilters.hours !== "all",
+  ].filter(Boolean).length;
+
+  function updateAdvancedFilter(field, value) {
+    setAdvancedFilters((current) => ({ ...current, [field]: value }));
+  }
+
+  function resetFilters() {
+    setQuery("");
+    setFilter("all");
+    setAdvancedFilters({ district: "all", cuisine: "all", hours: "all" });
+  }
 
   function addRestaurant(restaurant) {
     setRestaurants((current) => [restaurant, ...current]);
@@ -150,6 +313,9 @@ function App() {
           <button className="icon-button" type="button" onClick={exportArchive} title="下載 archive">
             <Download size={18} />
           </button>
+          <button className="icon-button" type="button" onClick={() => setShowFilters(true)} title="篩選">
+            <SlidersHorizontal size={18} />
+          </button>
           <button className="primary-button" type="button" onClick={() => setShowAdd(true)}>
             <Plus size={18} />
             新餐廳
@@ -158,69 +324,138 @@ function App() {
       </header>
 
       <main className="workspace">
-        <aside className="sidebar" aria-label="餐廳列表">
-          <div className="searchbox">
-            <Search size={17} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋餐廳、地區、地址" />
-          </div>
-
-          <div className="segmented" aria-label="餐廳類型">
-            {[
-              ["all", "全部"],
-              ["vegetarian", "素食"],
-              ["mixed", "有素食"],
-            ].map(([value, label]) => (
-              <button
-                className={filter === value ? "active" : ""}
-                key={value}
-                type="button"
-                onClick={() => setFilter(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="summary-row">
-            <span>{filteredRestaurants.length} 間餐廳</span>
-            <span>
-              <Archive size={14} /> local archive
-            </span>
-          </div>
-
-          <div className="restaurant-list">
-            {filteredRestaurants.map((restaurant) => (
-              <button
-                className={`restaurant-row ${selectedRestaurant?.id === restaurant.id ? "selected" : ""}`}
-                key={restaurant.id}
-                type="button"
-                onClick={() => setSelectedId(restaurant.id)}
-              >
-                <span className={`row-pin ${restaurant.category}`}>
-                  {restaurant.category === "vegetarian" ? <Leaf size={15} /> : <Utensils size={15} />}
-                </span>
-                <span>
-                  <strong>{restaurant.name}</strong>
-                  <small>
-                    {[restaurant.district || restaurant.address, restaurant.hours]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </small>
-                </span>
-              </button>
-            ))}
-          </div>
-        </aside>
-
         <section className="map-region" aria-label="香港餐廳地圖">
           <RestaurantMap
             restaurants={filteredRestaurants}
             selectedRestaurant={selectedRestaurant}
             onSelect={setSelectedId}
+            onBoundsChange={setMapBounds}
           />
         </section>
 
-        <RestaurantDetails restaurant={selectedRestaurant} />
+        <section className="results-region">
+          <aside className="sidebar" aria-label="餐廳列表">
+            <div className="list-tools">
+              <div className="searchbox">
+                <Search size={17} />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋餐廳、地區、地址" />
+              </div>
+              <button className="secondary-button filter-button" type="button" onClick={() => setShowFilters(true)}>
+                <SlidersHorizontal size={17} />
+                篩選{activeFilterCount ? ` ${activeFilterCount}` : ""}
+              </button>
+            </div>
+
+            <div className="segmented" aria-label="餐廳類型">
+              {[
+                ["all", "全部"],
+                ["vegetarian", "素食"],
+                ["mixed", "有素食"],
+              ].map(([value, label]) => (
+                <button
+                  className={filter === value ? "active" : ""}
+                  key={value}
+                  type="button"
+                  onClick={() => setFilter(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="summary-row">
+              <span>{visibleRestaurants.length} 間喺目前地圖範圍</span>
+              <span>
+                <Archive size={14} /> {filteredRestaurants.length} matched
+              </span>
+            </div>
+
+            <div className="restaurant-list">
+              {visibleRestaurants.map((restaurant) => (
+                <button
+                  className={`restaurant-row ${selectedRestaurant?.id === restaurant.id ? "selected" : ""}`}
+                  key={restaurant.id}
+                  type="button"
+                  onClick={() => setSelectedId(restaurant.id)}
+                >
+                  <span className={`row-pin ${restaurant.category}`}>
+                    {restaurant.category === "vegetarian" ? <Leaf size={15} /> : <Utensils size={15} />}
+                  </span>
+                  <span>
+                    <strong>{restaurant.name}</strong>
+                    <small>
+                      {[restaurant.district || restaurant.address, restaurant.hours]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <RestaurantDetails restaurant={selectedRestaurant} />
+        </section>
+
+        {showFilters && (
+          <div className="filter-backdrop" role="presentation" onClick={() => setShowFilters(false)}>
+            <aside className="filter-drawer" aria-label="篩選選項" onClick={(event) => event.stopPropagation()}>
+              <div className="filter-title">
+                <div>
+                  <h2>篩選</h2>
+                  <p>收窄地圖同列表結果。</p>
+                </div>
+                <button className="icon-button" type="button" onClick={() => setShowFilters(false)} title="關閉">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <label>
+                地區
+                <select value={advancedFilters.district} onChange={(event) => updateAdvancedFilter("district", event.target.value)}>
+                  <option value="all">全部地區</option>
+                  {filterOptions.districts.map((district) => (
+                    <option key={district} value={district}>{district}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                餐廳類型
+                <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+                  <option value="all">全部</option>
+                  <option value="vegetarian">素食餐廳</option>
+                  <option value="mixed">一般餐廳（有素食選擇）</option>
+                </select>
+              </label>
+
+              <label>
+                菜系
+                <select value={advancedFilters.cuisine} onChange={(event) => updateAdvancedFilter("cuisine", event.target.value)}>
+                  <option value="all">全部菜系</option>
+                  {filterOptions.cuisines.map((cuisine) => (
+                    <option key={cuisine} value={cuisine}>{cuisine}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                營業時間
+                <select value={advancedFilters.hours} onChange={(event) => updateAdvancedFilter("hours", event.target.value)}>
+                  <option value="all">全部</option>
+                  <option value="has-hours">有營業時間資料</option>
+                  <option value="early">10:00 或之前開始</option>
+                  <option value="late">21:00 或之後仍營業</option>
+                </select>
+              </label>
+
+              <div className="filter-actions">
+                <button className="secondary-button" type="button" onClick={resetFilters}>重設</button>
+                <button className="primary-button" type="button" onClick={() => setShowFilters(false)}>套用</button>
+              </div>
+            </aside>
+          </div>
+        )}
       </main>
 
       {showAdd && <AddRestaurantModal onClose={() => setShowAdd(false)} onAdd={addRestaurant} />}
@@ -229,7 +464,7 @@ function App() {
   );
 }
 
-function RestaurantMap({ restaurants, selectedRestaurant, onSelect }) {
+function RestaurantMap({ restaurants, selectedRestaurant, onSelect, onBoundsChange }) {
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -248,6 +483,19 @@ function RestaurantMap({ restaurants, selectedRestaurant, onSelect }) {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19,
     }).addTo(mapRef.current);
+
+    const reportBounds = () => {
+      const bounds = mapRef.current.getBounds();
+      onBoundsChange({
+        north: bounds.getNorth(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        west: bounds.getWest(),
+      });
+    };
+
+    mapRef.current.on("moveend zoomend", reportBounds);
+    reportBounds();
   }, []);
 
   useEffect(() => {
@@ -394,15 +642,95 @@ function AddRestaurantModal({ onAdd, onClose }) {
     category: "mixed",
     address: "",
     district: "",
-    lat: "22.3027",
-    lng: "114.1772",
+    lat: "",
+    lng: "",
     notes: "",
     menuText: "",
   });
   const [ocrStatus, setOcrStatus] = useState("");
+  const [locationStatus, setLocationStatus] = useState("");
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function resolveTypedAddress() {
+    const input = form.address.trim();
+    if (!input) {
+      setLocationStatus("請先貼 Google Maps link 或輸入地址。");
+      return null;
+    }
+
+    const parsed = parseGoogleMapsLocation(input);
+    if (parsed) {
+      const district = inferDistrictFromAddress(input) || inferDistrictFromCoords(parsed.lat, parsed.lng);
+      setForm((current) => ({
+        ...current,
+        lat: String(parsed.lat),
+        lng: String(parsed.lng),
+        district,
+      }));
+      setLocationStatus(`已讀取座標，地區推算為 ${district}`);
+      return { ...parsed, district, address: input };
+    }
+
+    if (/maps\.app\.goo\.gl|goo\.gl\/maps/i.test(input)) {
+      setLocationStatus("短 Google Maps link 未必包含座標；請用分享頁入面完整地址，或用目前位置。");
+      return null;
+    }
+
+    setLocationStatus("正在用地址搜尋位置...");
+    try {
+      const result = await geocodeAddress(input);
+      const district = inferDistrictFromAddress(input) || inferDistrictFromCoords(result.lat, result.lng);
+      setForm((current) => ({
+        ...current,
+        address: current.address || result.displayName,
+        lat: String(result.lat),
+        lng: String(result.lng),
+        district,
+      }));
+      setLocationStatus(`已搜尋位置，地區推算為 ${district}`);
+      return { ...result, district, address: input };
+    } catch {
+      setLocationStatus("未能由地址搵到位置，請貼包含座標嘅 Google Maps link 或使用目前位置。");
+      return null;
+    }
+  }
+
+  function useCurrentLocation() {
+    if (!navigator.geolocation) {
+      setLocationStatus("呢個 browser 未支援目前位置。");
+      return;
+    }
+
+    setLocationStatus("正在讀取目前位置...");
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const district = inferDistrictFromCoords(lat, lng);
+        let address = `Current location (${lat.toFixed(6)}, ${lng.toFixed(6)})`;
+
+        try {
+          const result = await reverseGeocode(lat, lng);
+          address = result.display_name || address;
+        } catch {
+          // Keep coordinate fallback if reverse geocoding is unavailable.
+        }
+
+        setForm((current) => ({
+          ...current,
+          address,
+          district,
+          lat: String(lat),
+          lng: String(lng),
+        }));
+        setLocationStatus(`已使用目前位置，地區推算為 ${district}`);
+      },
+      () => setLocationStatus("未能讀取目前位置，請確認已允許 location permission。"),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
   }
 
   async function extractImageText(file) {
@@ -435,17 +763,29 @@ function AddRestaurantModal({ onAdd, onClose }) {
     reader.readAsText(file);
   }
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
+    let lat = Number(form.lat);
+    let lng = Number(form.lng);
+    let district = form.district;
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      const resolved = await resolveTypedAddress();
+      if (!resolved) return;
+      lat = resolved.lat;
+      lng = resolved.lng;
+      district = resolved.district;
+    }
+
     const menuItems = parseMenuText(form.menuText);
     onAdd({
       id: crypto.randomUUID(),
       name: form.name.trim(),
       category: form.category,
       address: form.address.trim(),
-      district: form.district.trim(),
-      lat: Number(form.lat),
-      lng: Number(form.lng),
+      district: district || inferDistrictFromCoords(lat, lng),
+      lat,
+      lng,
       notes: form.notes.trim(),
       cuisine: "",
       sourceConfidence: "User uploaded menu",
@@ -461,7 +801,7 @@ function AddRestaurantModal({ onAdd, onClose }) {
         <div className="modal-title">
           <div>
             <h2>加入新餐廳</h2>
-            <p>填餐廳名、位置，再貼上、upload text 或 menu 圖片。</p>
+            <p>填餐廳名，用 Google Maps link 或目前位置加入地圖。</p>
           </div>
           <button className="icon-button" type="button" onClick={onClose} title="關閉">
             <X size={18} />
@@ -481,22 +821,22 @@ function AddRestaurantModal({ onAdd, onClose }) {
             </select>
           </label>
           <label>
-            地址
+            Google Maps link / 地址
             <input required value={form.address} onChange={(event) => updateField("address", event.target.value)} />
           </label>
-          <label>
-            地區
-            <input value={form.district} onChange={(event) => updateField("district", event.target.value)} />
-          </label>
-          <label>
-            Latitude
-            <input required type="number" step="0.000001" value={form.lat} onChange={(event) => updateField("lat", event.target.value)} />
-          </label>
-          <label>
-            Longitude
-            <input required type="number" step="0.000001" value={form.lng} onChange={(event) => updateField("lng", event.target.value)} />
-          </label>
         </div>
+
+        <div className="location-actions">
+          <button className="secondary-button" type="button" onClick={resolveTypedAddress}>
+            <MapPin size={17} />
+            讀取地址位置
+          </button>
+          <button className="secondary-button" type="button" onClick={useCurrentLocation}>
+            <LocateFixed size={17} />
+            使用目前位置
+          </button>
+        </div>
+        {locationStatus && <p className="ocr-status">{locationStatus}</p>}
 
         <label>
           備註
